@@ -1,1 +1,1 @@
-# Stock-Predictor-ML_Training
+# Stock-Predictor-ML-Training
