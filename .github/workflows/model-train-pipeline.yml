@@ -10,13 +10,13 @@ jobs:
       # - uses: iterative/setup-cml@v2
 
       - name: Install Packages
-        run:  |
+        run: |
           pip install --upgrade pip 
           pip install -r requirements.txt 
           pip install -e .
 
-        - name: Test with pytest
-          run: pytest tests/ --doctest-modules --junitxml=junit/test-results.xml --cov=com --cov-report=xml --cov-report=html
+      - name: Test with pytest
+        run: pytest tests/ --doctest-modules --junitxml=junit/test-results.xml --cov=com --cov-report=xml --cov-report=html
 
       - name: Train
         run: python main.py
