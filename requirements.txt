@@ -1,5 +1,7 @@
 mlflow>=2.19
 pandas
+pytest==8.3.4
+pytest-cov==6.0.0
 python-dotenv>=1.0.1
 tensorflow==2.18.0
 yfinance==0.2.50
