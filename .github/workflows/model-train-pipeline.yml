@@ -19,6 +19,6 @@ jobs:
         run: pytest tests/ --doctest-modules --junitxml=junit/test-results.xml --cov=com --cov-report=xml --cov-report=html
 
       - name: Train
-        run: python main.py
         env:
           HF_TOKEN: $${{secrets.HF_TOKEN}}
+        run: python main.py
