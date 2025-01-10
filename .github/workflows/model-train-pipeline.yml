@@ -3,11 +3,11 @@ name: model training pipeline
 on: [push]
 
 jobs:
-  build:
+  deployment:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4 # gives github actions access to your repository
-      - uses: iterative/setup-cml@v2 # to display model metrics
+      # - uses: iterative/setup-cml@v2 # to display model metrics
 
       - name: Install Packages
         run: |
@@ -20,5 +20,5 @@ jobs:
 
       - name: Train
         env:
-          HF_TOKEN: $${{secrets.HF_TOKEN}}
+          HF_TOKEN: ${{secrets.HF_TOKEN}}
         run: python main.py
