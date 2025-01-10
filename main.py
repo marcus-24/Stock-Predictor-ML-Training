@@ -26,6 +26,10 @@ TRAIN_PERCENT = 0.75
 N_FEATURES = len(DATA_COLS)
 
 HF_TOKEN = os.getenv("HF_TOKEN")
+if HF_TOKEN:
+    print("token recieved")
+else:
+    print("token was not passed")
 
 
 df = yf.Ticker("AAPL").history(interval="1d", start="2016-01-01", end="2024-01-30")
