@@ -3,6 +3,8 @@ import yfinance as yf
 import keras
 import os
 import warnings
+from dotenv import load_dotenv
+from huggingface_hub import HfApi, login
 
 # local imports
 from preprocessing.transformations import sequential_window_dataset
@@ -10,6 +12,7 @@ from models.lstm import build_bidirec_lstm_model
 
 warnings.filterwarnings("ignore", message="You are saving your model as an HDF5 file.")
 
+load_dotenv()
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"  # needed to suppress out of rand warnings
 
@@ -21,6 +24,8 @@ N_SHIFT = 1
 EPOCHS = 1000
 TRAIN_PERCENT = 0.75
 N_FEATURES = len(DATA_COLS)
+
+HF_TOKEN = os.getenv("HF_TOKEN")
 
 
 df = yf.Ticker("AAPL").history(interval="1d", start="2016-01-01", end="2024-01-30")
@@ -54,4 +59,21 @@ history = model.fit(
     epochs=EPOCHS,
     validation_data=val_set,
     callbacks=[early_stopping],
+)
+
+model_fname = os.path.join("data", "model.h5")
+model.save(model_fname)
+
+
+login(HF_TOKEN)
+
+api = HfApi()
+repo_id = "DrMarcus24/stock-predictor"
+api.create_repo(repo_id=repo_id, exist_ok=True)
+
+# Upload the model file(s)
+api.upload_file(
+    path_or_fileobj=model_fname,
+    path_in_repo="model.h5",
+    repo_id=repo_id,
 )
