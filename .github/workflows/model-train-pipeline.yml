@@ -2,9 +2,6 @@ name: model training pipeline
 
 on: [push]
 
-env:
-  HF_TOKEN: $${{secrets.HF_TOKEN}}
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -23,3 +20,5 @@ jobs:
 
       - name: Train
         run: python main.py
+        env:
+          HF_TOKEN: $${{secrets.HF_TOKEN}}
