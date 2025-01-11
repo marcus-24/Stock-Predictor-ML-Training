@@ -3,6 +3,8 @@ import yfinance as yf
 import keras
 import os
 import warnings
+import neptune
+from neptune.integrations.tensorflow_keras import NeptuneCallback
 from dotenv import load_dotenv
 from huggingface_hub import HfApi, login
 
@@ -26,6 +28,7 @@ TRAIN_PERCENT = 0.75
 N_FEATURES = len(DATA_COLS)
 
 HF_TOKEN = os.getenv("HF_TOKEN")
+NEPTUNE_TOKEN = os.getenv("NEPTUNE_TOKEN")
 
 df = yf.Ticker("AAPL").history(interval="1d", start="2016-01-01", end="2024-01-30")
 
@@ -51,19 +54,27 @@ model = build_bidirec_lstm_model(
 )
 
 """Train model"""
+neptune_run = neptune.init_run(
+    project="marcus-24/Neptune-Stock-Predictor", api_token=NEPTUNE_TOKEN
+)  # track training metrics in neptune server
 early_stopping = keras.callbacks.EarlyStopping(patience=10)
 
 history = model.fit(
     train_set,
     epochs=EPOCHS,
     validation_data=val_set,
-    callbacks=[early_stopping],
+    callbacks=[
+        early_stopping,
+        NeptuneCallback(run=neptune_run, base_namespace="training"),
+    ],
 )
+
+neptune_run.stop()
 
 model_fname = os.path.join("data", "model.h5")
 model.save(model_fname)
 
-
+"""Save model to Hugging Face Repository"""
 login(HF_TOKEN)
 
 api = HfApi()
