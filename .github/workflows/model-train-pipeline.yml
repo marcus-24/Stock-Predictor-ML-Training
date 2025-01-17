@@ -1,14 +1,21 @@
 name: model training pipeline
 
 on: [push]
+  branches:
+    - main
 
 jobs:
   deployment:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4 # gives github actions access to your repository
+      - name: Check out repository
+        uses: actions/checkout@v4 # gives github actions access to your repository
 
-      - name: Install Packages
+      - name: Set up Python
+        uses: actions/setup-python@v5  # lets you install a specific python version
+        with:
+          python-version: "3.12"
+          cache: "pip" # caching pip dependencies
         run: |
           pip install --upgrade pip 
           pip install -r requirements.txt 
@@ -17,8 +24,9 @@ jobs:
       - name: Test with pytest
         run: pytest tests/ --doctest-modules --junitxml=junit/test-results.xml --cov=com --cov-report=xml --cov-report=html
 
-      - name: Train
+      - name: Train machine learning model
         env:
           HF_TOKEN: ${{secrets.HF_TOKEN}}
           NEPTUNE_TOKEN: ${{secrets.NEPTUNE_TOKEN}}
+          BRANCH_NAME: ${{github.ref_name}}
         run: python main.py
