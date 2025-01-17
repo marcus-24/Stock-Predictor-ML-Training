@@ -1,8 +1,9 @@
 name: model training pipeline
 
-on: [push]
-  branches:
-    - main
+on:
+  push:
+    branches:
+      - main
 
 jobs:
   deployment:
@@ -12,7 +13,7 @@ jobs:
         uses: actions/checkout@v4 # gives github actions access to your repository
 
       - name: Set up Python
-        uses: actions/setup-python@v5  # lets you install a specific python version
+        uses: actions/setup-python@v5 # lets you install a specific python version
         with:
           python-version: "3.12"
           cache: "pip" # caching pip dependencies
