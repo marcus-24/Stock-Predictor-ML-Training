@@ -4,6 +4,7 @@ channels:
   - anaconda
   - defaults
 dependencies:
+  - ipykernel # to enable jupyter notebook for local development
   - python=3.12
   - pip
   - pip:

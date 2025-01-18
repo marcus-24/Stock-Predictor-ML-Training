@@ -1,3 +1,4 @@
+# %%
 # standard imports
 import yfinance as yf
 import os
@@ -10,11 +11,11 @@ from datetime import date
 from dateutil.relativedelta import relativedelta
 from neptune.integrations.tensorflow_keras import NeptuneCallback
 from dotenv import load_dotenv
-from huggingface_hub import HfApi, login
+from huggingface_hub import HfApi, login, Repository, snapshot_download
 
 # local imports
 from preprocessing.transformations import sequential_window_dataset
-from models.lstm import build_bidirec_lstm_model
+from models.lstm import build_model
 from configs.mysettings import NeptuneSettings, HuggingFaceSettings
 from configs.utils import set_env_name
 
@@ -82,7 +83,7 @@ val_set = sequential_window_dataset(
 )
 
 # %% Create model
-model = build_bidirec_lstm_model(
+model = build_model(
     train_set, n_past=N_PAST, n_features=N_FEATURES, batch_size=BATCH_SIZE
 )
 
@@ -101,29 +102,40 @@ history = model.fit(
 
 
 neptune_run.stop()
+# %% clone repo if needed
+local_hugface_dir = "model_repo"
+model_fname = os.path.join(local_hugface_dir, "model.h5")
 
-# %% Save model to hugging face only if its the best model
-# TODO: Add date factor as model becomes stale
-# project = neptune.init_project(
-#     project="marcus-24/Neptune-Stock-Predictor",
-#     api_token=neptune_settings.NEPTUNE_TOKEN,
-#     mode="read-only",
-# )
+hf_settings = HuggingFaceSettings()
+login(hf_settings.HF_TOKEN)
 
-# model_fname = os.path.join("data", "model.h5")
-# model.save(model_fname)
+repo_id = "DrMarcus24/test-stock-predictor"
+if not os.path.exists(local_hugface_dir):
+    repo = Repository(
+        local_dir=local_hugface_dir,  # creates local repo for you
+        clone_from=repo_id,  # path to remote repo
+        token=True,  # use token from login function
+    )
+else:
+    snapshot_download(repo_id=repo_id, repo_type="model", local_dir=local_hugface_dir)
 
-# """Save model to Hugging Face Repository"""
-# hf_settings = HuggingFaceSettings()
-# login(hf_settings.HF_TOKEN)
 
-# api = HfApi()
-# repo_id = "DrMarcus24/test-stock-predictor"
-# api.create_repo(repo_id=repo_id, exist_ok=True)
+# %%
+"""Replace model with new one if MAE is better with new data"""
+existing_model = keras.models.load_model(model_fname)
+results = existing_model.evaluate(
+    val_set
+)  # gather how existing model does with new data
 
-# # Upload the model file(s)
-# api.upload_file(
-#     path_or_fileobj=model_fname,
-#     path_in_repo="model.h5",
-#     repo_id=repo_id,
-# )
+new_model_mae = history.history["mae"][-1]
+existing_model_mae = results[1]
+if history.history["mae"][-1] < results["mae"]:
+
+    api = HfApi()
+
+    # Upload the model file(s)
+    api.upload_file(
+        path_or_fileobj=model_fname,
+        path_in_repo="model.keras",
+        repo_id=repo_id,
+    )
