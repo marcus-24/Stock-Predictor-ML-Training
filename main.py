@@ -9,6 +9,7 @@ import warnings
 import neptune
 from datetime import date
 from dateutil.relativedelta import relativedelta
+from sklearn.model_selection import train_test_split
 from neptune.integrations.tensorflow_keras import NeptuneCallback
 from dotenv import load_dotenv
 from huggingface_hub import HfApi, login, Repository, snapshot_download
@@ -57,29 +58,33 @@ neptune_run["environment"] = ENV
 
 # %% Preprocess data
 end_date = date.today()
-start_date = end_date - relativedelta(years=4)
+start_date = end_date - relativedelta(years=6)
 
-df = yf.Ticker("AAPL").history(interval="1d", start=start_date, end=end_date)
+df = (
+    yf.Ticker("AAPL")
+    .history(interval="1d", start=start_date, end=end_date)
+    .loc[:, DATA_COLS]
+)
 
 """Split Data"""
-split_idx = int(TRAIN_PERCENT * df.shape[0])
-split_time = df.index[split_idx]
+df_train, df_test = train_test_split(df, test_size=0.25, random_state=42)
+df_train, df_val = train_test_split(df_train, test_size=0.5, random_state=42)
 
-x_train = df.loc[:split_time, DATA_COLS]
-train_time = x_train.index.to_numpy()
-x_val = df.loc[split_time:, DATA_COLS]
-val_time = x_val.index.to_numpy()
-
-neptune_run["training/train/data_start_date"] = train_time[0]
-neptune_run["training/train/data_end_date"] = train_time[-1]
-neptune_run["training/validation/data_start_date"] = val_time[0]
-neptune_run["training/validation/data_end_date"] = val_time[-1]
+neptune_run["training/train/data_start_date"] = df_train.index[0]
+neptune_run["training/train/data_end_date"] = df_train.index[-1]
+neptune_run["training/validation/data_start_date"] = df_val.index[0]
+neptune_run["training/validation/data_end_date"] = df_val.index[-1]
+neptune_run["training/test/data_start_date"] = df_test.index[0]
+neptune_run["training/test/data_end_date"] = df_test.index[-1]
 
 train_set = sequential_window_dataset(
-    x_train, batch_size=BATCH_SIZE, n_past=N_PAST, n_future=N_FUTURE, shift=N_SHIFT
+    df_train, batch_size=BATCH_SIZE, n_past=N_PAST, n_future=N_FUTURE, shift=N_SHIFT
 )
 val_set = sequential_window_dataset(
-    x_val, batch_size=BATCH_SIZE, n_past=N_PAST, n_future=N_FUTURE, shift=N_SHIFT
+    df_val, batch_size=BATCH_SIZE, n_past=N_PAST, n_future=N_FUTURE, shift=N_SHIFT
+)
+test_set = sequential_window_dataset(
+    df_test, batch_size=BATCH_SIZE, n_past=N_PAST, n_future=N_FUTURE, shift=N_SHIFT
 )
 
 # %% Create model
@@ -122,20 +127,23 @@ else:
 
 # %%
 """Replace model with new one if MAE is better with new data"""
+_, new_model_mae = model.evaluate(test_set)
 existing_model = keras.models.load_model(model_fname)
-results = existing_model.evaluate(
-    val_set
+_, existing_model_mae = existing_model.evaluate(
+    test_set
 )  # gather how existing model does with new data
 
-new_model_mae = history.history["mae"][-1]
-existing_model_mae = results[1]
 if new_model_mae < existing_model_mae:  # only commit if new model is better
+
+    model.save(model_fname)
 
     api = HfApi()
 
     # Upload the model file(s)
     api.upload_file(
         path_or_fileobj=model_fname,
-        path_in_repo="model.keras",
+        path_in_repo="model.h5",
         repo_id=repo_id,
     )
+
+    print("New model has been uploaded to hugging face")
