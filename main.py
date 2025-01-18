@@ -129,7 +129,7 @@ results = existing_model.evaluate(
 
 new_model_mae = history.history["mae"][-1]
 existing_model_mae = results[1]
-if history.history["mae"][-1] < results["mae"]:
+if new_model_mae < existing_model_mae:  # only commit if new model is better
 
     api = HfApi()
 
