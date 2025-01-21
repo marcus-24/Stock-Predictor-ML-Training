@@ -12,7 +12,8 @@ from dateutil.relativedelta import relativedelta
 from sklearn.model_selection import train_test_split
 from neptune.integrations.tensorflow_keras import NeptuneCallback
 from dotenv import load_dotenv
-from huggingface_hub import HfApi, login, Repository, snapshot_download
+from huggingface_hub import login
+from requests.exceptions import HTTPError
 
 # local imports
 from preprocessing.transformations import sequential_window_dataset
@@ -22,7 +23,7 @@ from configs.utils import set_env_name
 
 warnings.filterwarnings("ignore", message="You are saving your model as an HDF5 file.")
 
-load_dotenv()
+load_dotenv(".env")
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"  # needed to suppress out of rand warnings
 
@@ -38,12 +39,13 @@ N_FEATURES = len(DATA_COLS)
 
 BRANCH_NAME: str = os.getenv("BRANCH_NAME")
 ENV = set_env_name(BRANCH_NAME)
+MODEL_URL = "hf://DrMarcus24/test-stock-predictor"
 
 # %% Set up Neptune AI Tracking
 neptune_settings = NeptuneSettings()
 neptune_run = neptune.init_run(
     project="marcus-24/Neptune-Stock-Predictor",
-    api_token=neptune_settings.NEPTUNE_TOKEN,
+    api_token=neptune_settings.NEPTUNE_TOKEN.get_secret_value(),
     tags=["test_model", "NOT_4_PRODUCTION"],
 )  # track training metrics in neptune server
 
@@ -108,42 +110,24 @@ history = model.fit(
 
 neptune_run.stop()
 # %% clone repo if needed
-local_hugface_dir = "model_repo"
-model_fname = os.path.join(local_hugface_dir, "model.h5")
-
 hf_settings = HuggingFaceSettings()
-login(hf_settings.HF_TOKEN)
-
-repo_id = "DrMarcus24/test-stock-predictor"
-if not os.path.exists(local_hugface_dir):
-    repo = Repository(
-        local_dir=local_hugface_dir,  # creates local repo for you
-        clone_from=repo_id,  # path to remote repo
-        token=True,  # use token from login function
-    )
-else:
-    snapshot_download(repo_id=repo_id, repo_type="model", local_dir=local_hugface_dir)
+login(hf_settings.HF_TOKEN.get_secret_value())
 
 
-# %%
-"""Replace model with new one if MAE is better with new data"""
-_, new_model_mae = model.evaluate(test_set)
-existing_model = keras.models.load_model(model_fname)
-_, existing_model_mae = existing_model.evaluate(
-    test_set
-)  # gather how existing model does with new data
+# %% Replace model with new one if MAE is better with new data
 
-if new_model_mae < existing_model_mae:  # only commit if new model is better
+try:
+    _, new_model_mae = model.evaluate(test_set)  # Evaluate new model on test set
+    existing_model = keras.models.load_model(
+        MODEL_URL
+    )  # evalute production model on test ste
+    _, existing_model_mae = existing_model.evaluate(
+        test_set
+    )  # gather how existing model does with new data
 
-    model.save(model_fname)
+    if new_model_mae < existing_model_mae:  # only commit if new model is better
 
-    api = HfApi()
-
-    # Upload the model file(s)
-    api.upload_file(
-        path_or_fileobj=model_fname,
-        path_in_repo="model.h5",
-        repo_id=repo_id,
-    )
-
-    print("New model has been uploaded to hugging face")
+        model.save(MODEL_URL)
+except HTTPError as err:
+    print("An error occurred: ", err)
+    model.save(MODEL_URL)
