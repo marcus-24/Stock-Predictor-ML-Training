@@ -13,6 +13,7 @@ from sklearn.model_selection import train_test_split
 from neptune.integrations.tensorflow_keras import NeptuneCallback
 from dotenv import load_dotenv
 from huggingface_hub import login
+from datasets import Dataset
 from requests.exceptions import HTTPError
 
 # local imports
@@ -33,13 +34,18 @@ BATCH_SIZE = 32
 N_PAST = 10
 N_FUTURE = 10
 N_SHIFT = 1
-EPOCHS = 1000
-TRAIN_PERCENT = 0.75
+EPOCHS = 2
+TEST_SIZE = 0.25
+VAL_SIZE = 0.5  # split in relation to test size
 N_FEATURES = len(DATA_COLS)
+N_LABELS = 1  # only predicting close price
 
 BRANCH_NAME: str = os.getenv("BRANCH_NAME")
 ENV = set_env_name(BRANCH_NAME)
+
+# TODO: Make these environment variables where models and data is pushed to a separate branches depending on enviornment
 MODEL_URL = "hf://DrMarcus24/test-stock-predictor"
+DATASET_URL = "DrMarcus24/stock-predictor-data"
 
 # %% Set up Neptune AI Tracking
 neptune_settings = NeptuneSettings()
@@ -54,7 +60,8 @@ neptune_run["parameters/batch_size"] = BATCH_SIZE
 neptune_run["parameters/n_past"] = N_PAST
 neptune_run["parameters/n_future"] = N_FUTURE
 neptune_run["parameters/n_shift"] = N_SHIFT
-neptune_run["parameters/tain_percent"] = TRAIN_PERCENT
+neptune_run["parameters/test_size"] = TEST_SIZE
+neptune_run["parameters/val_size"] = VAL_SIZE
 
 neptune_run["environment"] = ENV
 
@@ -69,8 +76,8 @@ df = (
 )
 
 """Split Data"""
-df_train, df_test = train_test_split(df, test_size=0.25, random_state=42)
-df_train, df_val = train_test_split(df_train, test_size=0.5, random_state=42)
+df_train, df_test = train_test_split(df, test_size=TEST_SIZE, random_state=42)
+df_train, df_val = train_test_split(df_train, test_size=VAL_SIZE, random_state=42)
 
 neptune_run["training/train/data_start_date"] = df_train.index[0]
 neptune_run["training/train/data_end_date"] = df_train.index[-1]
@@ -89,9 +96,14 @@ test_set = sequential_window_dataset(
     df_test, batch_size=BATCH_SIZE, n_past=N_PAST, n_future=N_FUTURE, shift=N_SHIFT
 )
 
+
 # %% Create model
 model = build_model(
-    train_set, n_past=N_PAST, n_features=N_FEATURES, batch_size=BATCH_SIZE
+    train_set,
+    n_past=N_PAST,
+    n_features=N_FEATURES,
+    n_labels=N_LABELS,
+    batch_size=BATCH_SIZE,
 )
 
 # %% Train model
@@ -126,8 +138,19 @@ try:
     )  # gather how existing model does with new data
 
     if new_model_mae < existing_model_mae:  # only commit if new model is better
-
+        # TODO: not DRY
+        dataset = (
+            Dataset.from_pandas(df)
+            .train_test_split(test_size=TEST_SIZE)
+            .push_to_hub(DATASET_URL)
+        )
         model.save(MODEL_URL)
+
 except HTTPError as err:
     print("An error occurred: ", err)
+    dataset = (
+        Dataset.from_pandas(df)
+        .train_test_split(test_size=TEST_SIZE)
+        .push_to_hub(DATASET_URL)
+    )
     model.save(MODEL_URL)

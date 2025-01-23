@@ -15,7 +15,7 @@ def sequential_window_dataset(
         )  # window features
         .flat_map(lambda w: w.batch(n_past + n_future))  #
         .map(
-            lambda w: (w[:n_past], w[n_past:])
+            lambda w: (w[:n_past], w[n_past:, -1])
         )  # split into features and labels (window past )
         .batch(batch_size, drop_remainder=True)
         .prefetch(tf.data.AUTOTUNE)

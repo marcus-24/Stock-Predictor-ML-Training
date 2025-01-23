@@ -3,7 +3,7 @@ import tensorflow as tf
 
 
 def build_model(
-    data: tf.data.Dataset, n_past: int, n_features: int, batch_size: int
+    data: tf.data.Dataset, n_past: int, n_features: int, n_labels: int, batch_size: int
 ) -> models.Sequential:
     """This function is used to build the forecasting model. Each iteration of creating a new
     model can be done in this function so that its tested in the unit tests before deployment
@@ -21,7 +21,7 @@ def build_model(
             norm_layer,  # plug in fitted normalization layer
             layers.Bidirectional(layers.LSTM(5, return_sequences=True)),
             layers.Bidirectional(layers.LSTM(5, return_sequences=True)),
-            layers.Dense(n_features),
+            layers.Dense(n_labels),
         ]
     )
 
