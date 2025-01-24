@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch: # entry point for inference to trigger a retrain
 
 jobs:
   deployment:
