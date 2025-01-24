@@ -18,6 +18,7 @@ N_PAST = 10
 N_FUTURE = 10
 N_FEATURES = 2
 N_SHIFT = 1
+N_LABELS = 1
 
 
 @pytest.fixture
@@ -34,7 +35,11 @@ def train_set():
 @pytest.fixture
 def model(train_set: tf.data.Dataset):
     return build_model(
-        train_set, n_past=N_PAST, n_features=N_FEATURES, batch_size=BATCH_SIZE
+        train_set,
+        n_past=N_PAST,
+        n_features=N_FEATURES,
+        batch_size=BATCH_SIZE,
+        n_labels=N_LABELS,
     )
 
 
