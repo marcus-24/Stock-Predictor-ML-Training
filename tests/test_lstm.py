@@ -10,7 +10,7 @@ from keras import models
 import tensorflow as tf
 
 
-from models.lstm import build_model
+from models.builders import build_model
 from preprocessing.transformations import sequential_window_dataset
 
 BATCH_SIZE = 32
