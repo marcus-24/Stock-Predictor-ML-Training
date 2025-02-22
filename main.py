@@ -99,7 +99,6 @@ test_set = df_to_dataset(df_test, batch_size=BATCH_SIZE)
 n_features = transformed_df.shape[1] - N_LABELS  # to account for label column
 model: models.Sequential = build_model(
     train_set,
-    n_past=N_PAST,
     n_features=n_features,
     n_labels=N_LABELS,
     batch_size=BATCH_SIZE,
