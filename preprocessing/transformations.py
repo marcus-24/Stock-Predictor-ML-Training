@@ -7,29 +7,22 @@ def feature_engineering(df: pd.DataFrame, win_size: int, n_future: int) -> pd.Da
     # https://medium.com/aimonks/improving-stock-price-forecasting-by-feature-engineering-8a5d0be2be96
     _df = df.copy()
 
-    trans_df = (
-        pd.DataFrame()
-        .assign(
-            # year=_df.index.year.to_list(),
-            # month=_df.index.month.to_list(),
-            # day=_df.index.day.to_list(),
-            # hour=_df.index.hour.to_list(),
-            daily_var=(_df["High"] - _df["Low"]) / (_df["Open"]),
-            sev_day_sma=_df["Close"].rolling(win_size).mean(),
-            sev_day_std=_df["Close"].rolling(win_size).std(),
-            daily_return=_df["Close"].diff(),
-            sma_2std_pos=_df["Close"].rolling(win_size).mean()
+    trans_df = pd.DataFrame(
+        {
+            "daily_var": (_df["High"] - _df["Low"]) / (_df["Open"]),
+            "sev_day_sma": _df["Close"].rolling(win_size).mean(),
+            "sev_day_std": _df["Close"].rolling(win_size).std(),
+            "daily_return": _df["Close"].diff(),
+            "sma_2std_pos": _df["Close"].rolling(win_size).mean()
             + 2 * _df["Close"].rolling(win_size).std(),
-            sma_2std_neg=_df["Close"].rolling(win_size).mean()
+            "sma_2std_neg": _df["Close"].rolling(win_size).mean()
             - 2 * _df["Close"].rolling(win_size).std(),
-            high_close=(_df["High"] - _df["Close"]) / _df["Open"],
-            low_open=(_df["Low"] - _df["Open"]) / _df["Open"],
-            cum_return=_df["Close"] - _df["Close"].iloc[0],
-            label=_df["Close"].shift(n_future),  # TODO: Make multiple columns for
-        )
-        .dropna()
-    )
-
+            "high_close": (_df["High"] - _df["Close"]) / _df["Open"],
+            "low_open": (_df["Low"] - _df["Open"]) / _df["Open"],
+            "cumul_return": _df["Close"] - _df["Close"].iloc[0],
+            "label": _df["Close"].shift(n_future),
+        }
+    ).dropna()
     return trans_df
 
 
