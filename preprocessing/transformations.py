@@ -1,38 +1,64 @@
 import pandas as pd
 import tensorflow as tf
+from scipy import stats
 
 
-def windowed_mean(x: tf.Tensor) -> tf.Tensor:
-    mean = tf.math.reduce_mean(x, axis=0)
-    return tf.expand_dims(mean, axis=0)
+def feature_engineering(df: pd.DataFrame, win_size: int, n_future: int) -> pd.DataFrame:
+    # https://medium.com/aimonks/improving-stock-price-forecasting-by-feature-engineering-8a5d0be2be96
+    _df = df.copy()
+
+    trans_df = (
+        pd.DataFrame()
+        .assign(
+            # year=_df.index.year.to_list(),
+            # month=_df.index.month.to_list(),
+            # day=_df.index.day.to_list(),
+            # hour=_df.index.hour.to_list(),
+            daily_var=(_df["High"] - _df["Low"]) / (_df["Open"]),
+            sev_day_sma=_df["Close"].rolling(win_size).mean(),
+            sev_day_std=_df["Close"].rolling(win_size).std(),
+            daily_return=_df["Close"].diff(),
+            sma_2std_pos=_df["Close"].rolling(win_size).mean()
+            + 2 * _df["Close"].rolling(win_size).std(),
+            sma_2std_neg=_df["Close"].rolling(win_size).mean()
+            - 2 * _df["Close"].rolling(win_size).std(),
+            high_close=(_df["High"] - _df["Close"]) / _df["Open"],
+            low_open=(_df["Low"] - _df["Open"]) / _df["Open"],
+            cum_return=_df["Close"] - _df["Close"].iloc[0],
+            label=_df["Close"].shift(n_future),  # TODO: Make multiple columns for
+        )
+        .dropna()
+    )
+
+    return trans_df
 
 
-def sequential_window_dataset(
+def feature_selection(df: pd.DataFrame, label_col_name: str = "label"):
+    _df = df.copy()
+    label = _df.pop(label_col_name)
+    return [(col_name, *stats.ttest_ind(label, ser)) for col_name, ser in _df.items()]
+
+
+def add_dimension_to_element(
+    feature: tf.Tensor, label: tf.Tensor
+) -> tuple[tf.Tensor, tf.Tensor]:
+    feature_expanded = tf.expand_dims(feature, axis=0)
+    label_expanded = tf.expand_dims(label, axis=0)
+    return feature_expanded, label_expanded
+
+
+def df_to_dataset(
     df: pd.DataFrame,
     batch_size: int,
-    n_past: int,
-    n_future: int,
-    shift: int,
-    shuffle_batch_size: int = 10000,
+    label_col: str = "label",
 ) -> tf.data.Dataset:
+    _df = df.copy()
+    labels = _df.pop(label_col)
 
     return (
-        tf.data.Dataset.from_tensor_slices(
-            df.values
-        )  # transform array to tensor dataset type
-        .window(
-            size=n_past + n_future, shift=shift, drop_remainder=True
-        )  # window features
-        .flat_map(
-            lambda window: window.batch(n_past + n_future)
-        )  # convert to tensors of given batch size
-        .shuffle(shuffle_batch_size)  # shuffle data to avoid learning patterns
-        .map(
-            lambda window: (
-                windowed_mean(window[:n_past]),
-                window[-1, -1],
-            )  # get last point as prediction
-        )  # take one window at a time and split into features and labels
+        tf.data.Dataset.from_tensor_slices((_df, labels))
+        .map(add_dimension_to_element)
+        # .shuffle(buffer_size=_df.shape[0])
         .batch(batch_size)
         .prefetch(tf.data.AUTOTUNE)
-    )  # create batch and prefetch next batch while processing current batch
+    )

@@ -5,22 +5,26 @@ import os
 
 os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"  # turn off one DNN custom operations
 import keras
-import numpy as np
 from keras import models
 import tensorflow as tf
 import warnings
 import neptune
-from datetime import date
+from neptune.types import File
+from datetime import datetime
 from dateutil.relativedelta import relativedelta
 from sklearn.model_selection import train_test_split
 from neptune.integrations.tensorflow_keras import NeptuneCallback
 from dotenv import load_dotenv
 from huggingface_hub import login, HfApi
 from datasets import Dataset
+import matplotlib.pyplot as plt
 
 # local imports
-from preprocessing.transformations import sequential_window_dataset
-from models.builders import build_model, scheduler
+from preprocessing.transformations import (
+    df_to_dataset,
+    feature_engineering,
+)
+from models.builders import build_model
 from configs.mysettings import NeptuneSettings, HuggingFaceSettings
 from configs.branchsettings import set_env_name
 
@@ -31,15 +35,14 @@ load_dotenv()
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"  # needed to suppress out of rand warnings
 
 # %% Define constant variables
-DATA_COLS = ["Open", "High", "Low", "Close"]
-BATCH_SIZE = 32
-N_PAST = 20
+BATCH_SIZE = 64
+WIN_SIZE = 7
+N_PAST = 1
 N_FUTURE = 1  # TODO: Find out how Evidently AI handles multiple targets and predictions
 N_SHIFT = 1
 EPOCHS = 1000
 TEST_SIZE = 0.25
 VAL_SIZE = 0.5  # split in relation to test size
-N_FEATURES = len(DATA_COLS)
 N_LABELS = 1  # only predicting close price
 
 BRANCH_NAME: str = os.getenv("BRANCH_NAME")
@@ -68,17 +71,17 @@ neptune_run["parameters/val_size"] = VAL_SIZE
 neptune_run["environment"] = ENV
 
 # %% Preprocess data
-end_date = date.today()
-start_date = end_date - relativedelta(days=90)
+# TODO: Need limits to keep dates during trading hours and non holidays
+start_time = datetime.today() - relativedelta(days=90)
 
-df = (
-    yf.Ticker("AAPL")
-    .history(interval="1h", start=start_date, end=end_date)
-    .loc[:, DATA_COLS]
-)
+df = yf.Ticker("AAPL").history(interval="1h", start=start_time)
+transformed_df = feature_engineering(df, win_size=WIN_SIZE, n_future=N_FUTURE)
+
 
 """Split Data"""
-df_train, df_test = train_test_split(df, test_size=TEST_SIZE, random_state=42)
+df_train, df_test = train_test_split(
+    transformed_df, test_size=TEST_SIZE, random_state=42
+)
 df_train, df_val = train_test_split(df_train, test_size=VAL_SIZE, random_state=42)
 
 neptune_run["training/train/data_start_date"] = df_train.index[0]
@@ -88,19 +91,16 @@ neptune_run["training/validation/data_end_date"] = df_val.index[-1]
 neptune_run["training/test/data_start_date"] = df_test.index[0]
 neptune_run["training/test/data_end_date"] = df_test.index[-1]
 
-train_set = sequential_window_dataset(
-    df_train, batch_size=BATCH_SIZE, n_past=N_PAST, n_future=N_FUTURE, shift=N_SHIFT
-)
-val_set = sequential_window_dataset(
-    df_val, batch_size=BATCH_SIZE, n_past=N_PAST, n_future=N_FUTURE, shift=N_SHIFT
-)
-test_set = sequential_window_dataset(
-    df_test, batch_size=BATCH_SIZE, n_past=N_PAST, n_future=N_FUTURE, shift=N_SHIFT
-)
+train_set = df_to_dataset(df_train, batch_size=BATCH_SIZE)
+val_set = df_to_dataset(df_val, batch_size=BATCH_SIZE)
+test_set = df_to_dataset(df_test, batch_size=BATCH_SIZE)
 
 # %% Create model
+n_features = transformed_df.shape[1] - N_LABELS  # to account for label column
 model: models.Sequential = build_model(
-    n_features=N_FEATURES,
+    train_set,
+    n_past=N_PAST,
+    n_features=n_features,
     n_labels=N_LABELS,
     batch_size=BATCH_SIZE,
 )
@@ -117,6 +117,27 @@ history = model.fit(
         NeptuneCallback(run=neptune_run, base_namespace="training"),
     ],
 )
+
+
+# %% Analyze Predictions
+
+"""Create predictions for whole dataset"""
+whole_set = df_to_dataset(transformed_df, batch_size=BATCH_SIZE)
+whole_features = whole_set.map(lambda x, _: x)  # get only the features
+predictions = model.predict(whole_features)  # create predictions
+predictions = tf.reshape(
+    predictions, [-1]
+).numpy()  # reshape into a single dimensional array
+
+transformed_df["predictions"] = predictions
+
+"""Save plot to Neptune"""
+fig, ax = plt.subplots()
+transformed_df[["label", "predictions"]].plot(ax=ax)
+ax.grid(True)
+ax.set_xlabel("Time (hours)")
+ax.set_ylabel("Stock Price ($)")
+neptune_run["visuals/prediction_vs_target"].upload(File.as_html(fig))
 
 
 neptune_run.stop()
@@ -142,23 +163,15 @@ if repo_exists:
 
 # if True:
 if not repo_exists or new_model_mae < existing_model_mae:
-    """Create predictions for whole dataset"""
-    whole_set = sequential_window_dataset(
-        df, batch_size=BATCH_SIZE, n_past=N_PAST, n_future=N_FUTURE, shift=N_SHIFT
-    )
-    whole_features = whole_set.map(lambda x, _: x)
-    predictions = model.predict(whole_features)
-    predictions = tf.reshape(predictions, [-1]).numpy()
 
-    """Create labeled dataframe"""
-    labeled_df = df.assign(
-        target=df["Close"].shift(periods=N_FUTURE),
-        predictions=np.concatenate((np.zeros(N_PAST), predictions)),
-    )
+    """Create dataset for hugging face"""
+    # do not want to save features to hugging face
+    # TODO: Create feature store
+    hugging_df = transformed_df[["predictions", "label"]].join(df, how="inner")
 
     """Push dataset and model to hugging face"""
     dataset = (
-        Dataset.from_pandas(labeled_df)
+        Dataset.from_pandas(hugging_df)
         .train_test_split(test_size=TEST_SIZE)
         .push_to_hub(DATASET_URL)
     )
