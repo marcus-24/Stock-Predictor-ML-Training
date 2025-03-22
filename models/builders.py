@@ -6,7 +6,7 @@ from keras import (
 )  # TODO: figure out pylance errors
 import tensorflow as tf
 
-LR = 0.01
+LR = 0.1
 
 
 def scheduler(epoch: int) -> float:
@@ -35,7 +35,7 @@ def build_model(
             layers.InputLayer(shape=(win_size, n_features), batch_size=batch_size),
             norm_layer,
             layers.Bidirectional(layers.LSTM(5, return_sequences=True)),
-            layers.Bidirectional(layers.LSTM(5)),
+            # layers.Bidirectional(layers.LSTM(5)),
             layers.Dense(n_labels),
         ]
     )

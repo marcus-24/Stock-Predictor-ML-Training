@@ -17,3 +17,7 @@ class HuggingFaceSettings(BaseSettings):
     """Loads Hugging Face settings from environment variables"""
 
     HF_TOKEN: SecretStr
+
+
+class HopsworksSettings(BaseSettings):
+    HOPSWORKS_KEY: SecretStr

@@ -5,8 +5,8 @@ channels:
   - defaults
 dependencies:
   - ipykernel # to enable jupyter notebook for local development
-  - python=3.12
+  - python=3.11
   - pip
   - pip:
-      - -e .
       - -r requirements.txt
+      - -e .
