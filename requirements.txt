@@ -8,6 +8,7 @@ numpy
 pandas
 pydantic-settings==2.8.1
 pytest
+pytest-cov
 python-dotenv
 scikit-learn==1.6.1
 tensorflow==2.19.0
