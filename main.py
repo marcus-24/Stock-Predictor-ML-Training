@@ -5,7 +5,6 @@ import os
 os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"  # turn off one DNN custom operations
 import keras
 from keras import models
-import tensorflow as tf
 import hopsworks
 import warnings
 import neptune
@@ -14,17 +13,14 @@ from sklearn.model_selection import train_test_split
 from neptune.integrations.tensorflow_keras import NeptuneCallback
 from dotenv import load_dotenv
 from huggingface_hub import login, HfApi
-import matplotlib.pyplot as plt
 from hsfs.feature_store import FeatureStore
-from hsfs.feature_view import FeatureView
-import pandas as pd
 import yfinance as yf
 
 # local imports
 from preprocessing.transformations import (
     df_to_dataset,
 )
-from preprocessing.predictions import format_predictions, custom_plot
+from preprocessing.predictions import format_predictions, performance_plot
 from models.builders import build_model
 from configs.mysettings import NeptuneSettings, HuggingFaceSettings, HopsworksSettings
 from configs.branchsettings import set_env_name
@@ -128,7 +124,7 @@ predictions_df = format_predictions(predictions, features=df)
 
 # """Save plot to Neptune"""
 financial_data = yf.Ticker("AAPL").history(start=df.index[0], end=df.index[-1])
-fig = custom_plot(predictions_df, financial_data)
+fig = performance_plot(predictions_df, financial_data)
 
 neptune_run["visuals/prediction_vs_target"].upload(File.as_html(fig))
 

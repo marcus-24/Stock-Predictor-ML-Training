@@ -2,7 +2,7 @@ import pandas as pd
 import tensorflow as tf
 
 
-def add_dimension_to_element(
+def _add_dimension_to_element(
     feature: tf.Tensor, label: tf.Tensor
 ) -> tuple[tf.Tensor, tf.Tensor]:
     feature_expanded = tf.expand_dims(feature, axis=0)
@@ -22,7 +22,7 @@ def df_to_dataset(
 
     return (
         tf.data.Dataset.from_tensor_slices((features, labels))
-        .map(add_dimension_to_element)
+        .map(_add_dimension_to_element)
         # .shuffle(buffer_size=_df.shape[0])
         .batch(batch_size)
         .prefetch(tf.data.AUTOTUNE)
