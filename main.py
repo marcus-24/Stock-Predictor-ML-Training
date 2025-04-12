@@ -14,6 +14,7 @@ from neptune.integrations.tensorflow_keras import NeptuneCallback
 from dotenv import load_dotenv
 from huggingface_hub import login, HfApi
 from hsfs.feature_store import FeatureStore
+import pandas as pd
 import yfinance as yf
 
 # local imports
@@ -36,7 +37,6 @@ BATCH_SIZE = 32
 EPOCHS = 1000
 TEST_SIZE = 0.25
 VAL_SIZE = 0.5  # split in relation to test size
-N_LABELS = 7  # only predicting close price
 
 BRANCH_NAME: str = os.getenv("BRANCH_NAME")
 ENV = set_env_name(BRANCH_NAME)
@@ -51,14 +51,23 @@ project = hopsworks.login(
 )
 fs: FeatureStore = project.get_feature_store()
 
-features_df = fs.get_feature_group(name="stock_features").read().set_index("date")
+features_fg = fs.get_feature_group(name="stock_features")
+labels_fg = fs.get_feature_group(name="stock_labels")
 
-labels_df = fs.get_feature_group(name="stock_labels").read().set_index("date")
 
+query = features_fg.select_all().join(
+    labels_fg.select_all(), left_on=["date"], right_on=["date"], join_type="inner"
+)
 
-df = features_df.join(labels_df, how="inner").sort_index()
+feature_view = fs.create_feature_view(
+    name="model_training_data",
+    query=query,
+)
 
-# select the features that will be used by the model
+df, _ = feature_view.training_data(description="stock prediction with labels")
+df["date"] = pd.to_datetime(df["date"])
+df = df.set_index("date").sort_index()
+
 
 # %% Split data and transform into tensorflow dataset
 df_train, df_test = train_test_split(df, test_size=TEST_SIZE, random_state=42)
@@ -91,11 +100,12 @@ neptune_run["training/test/data_start_date"] = df_test.index[0]
 neptune_run["training/test/data_end_date"] = df_test.index[-1]
 
 # %% Create model
-n_features = features_df.shape[1]
+n_features = len([col for col in df.columns if "label" not in col])
+n_labels = df.shape[1] - n_features
 model: models.Sequential = build_model(
     train_set,
     n_features=n_features,
-    n_labels=N_LABELS,
+    n_labels=n_labels,
     batch_size=BATCH_SIZE,
 )
 
@@ -120,6 +130,7 @@ whole_set = df_to_dataset(df, batch_size=BATCH_SIZE)
 whole_features = whole_set.map(lambda x, _: x)  # get only the features
 predictions = model.predict(whole_features)  # create predictions
 predictions_df = format_predictions(predictions, features=df)
+print(predictions_df.index[-1])
 
 
 # """Save plot to Neptune"""

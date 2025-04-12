@@ -15,7 +15,7 @@ def format_predictions(
 
     Args:
         predictions (NDArray[np.float64]): predictions directly from the tensorflow model
-        features (pd.DataFrame): machine learninf model features used to get date indices for predictions
+        features (pd.DataFrame): machine learning model features used to get date indices for predictions
 
     Returns:
         pd.DataFrame: formatted predictions
