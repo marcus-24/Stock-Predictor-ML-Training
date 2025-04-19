@@ -14,6 +14,7 @@ from neptune.integrations.tensorflow_keras import NeptuneCallback
 from dotenv import load_dotenv
 from huggingface_hub import login, HfApi
 from hsfs.feature_store import FeatureStore
+from hsfs.feature_group import FeatureGroup
 import pandas as pd
 import yfinance as yf
 
@@ -25,6 +26,7 @@ from preprocessing.predictions import format_predictions, performance_plot
 from models.builders import build_model
 from configs.mysettings import NeptuneSettings, HuggingFaceSettings, HopsworksSettings
 from configs.branchsettings import set_env_name
+from myfeatures.mlops import delete_existing_feature_group
 
 warnings.filterwarnings("ignore", message="You are saving your model as an HDF5 file.")
 
@@ -130,7 +132,7 @@ whole_set = df_to_dataset(df, batch_size=BATCH_SIZE)
 whole_features = whole_set.map(lambda x, _: x)  # get only the features
 predictions = model.predict(whole_features)  # create predictions
 predictions_df = format_predictions(predictions, features=df)
-print(predictions_df.index[-1])
+predictions_df.to_csv("predictions.csv")
 
 
 # """Save plot to Neptune"""
@@ -163,4 +165,18 @@ if repo_exists:
 
 if not repo_exists or new_model_mae < existing_model_mae:
 
+    print("Saving a new version of the stock prediction model")
+
     model.save(model_url)
+
+    fg_name = "trained_model_predictions"
+    delete_existing_feature_group(fs, fg_name=fg_name)
+    fg_predictions: FeatureGroup = fs.create_feature_group(
+        name=fg_name,
+        description="stores predictions of a fully trained model for the features used during training",
+        primary_key=["date"],
+        event_time="date",
+        online_enabled=False,
+    )
+
+    fg_predictions.insert(predictions_df)

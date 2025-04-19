@@ -8,6 +8,33 @@ from numpy.typing import NDArray
 from myfeatures.dates import financial_date_correction
 
 
+def _correct_future_time_index(
+    time_index: pd.DatetimeIndex, days_ahead: int
+) -> pd.DatetimeIndex:
+    """Generates future time stamps to skip over financial holidays and weekends
+
+    Args:
+        time_index (pd.DatetimeIndex): original time index from features
+        days_ahead (int): how many days to shift time index from starting date
+
+    Returns:
+        pd.DatetimeIndex: corrected time index to reflect future time steps
+    """
+    corrected_time_index = [None] * len(time_index)
+    for jdx, dt in enumerate(time_index):
+        if jdx == 0:  # only shift start point by days ahead
+            corrected_time_index[jdx] = financial_date_correction(
+                dt + relativedelta(days=days_ahead)
+            )
+        else:  # shift all other times stamps ahead by a day from previous step
+            corrected_time_index[jdx] = financial_date_correction(
+                corrected_time_index[jdx - 1] + relativedelta(days=1),
+                direction="forward",
+            )
+
+    return corrected_time_index
+
+
 def format_predictions(
     predictions: NDArray[np.float64], features: pd.DataFrame
 ) -> pd.DataFrame:
@@ -26,14 +53,10 @@ def format_predictions(
     n_cols = predictions.shape[1]
     for idx in range(n_cols):
         pred_col = predictions[:, idx]
-        time_idx = pd.DatetimeIndex(
-            [dt + relativedelta(days=idx + 1) for dt in features.index]
-        )
-        corrected_time_idx = [
-            financial_date_correction(t, direction="forward") for t in time_idx
-        ]
+
         df_append = pd.DataFrame(
-            {f"label_{idx + 1}": pred_col}, index=corrected_time_idx
+            {f"pred_time_{idx + 1}": pred_col},
+            index=_correct_future_time_index(features.index, days_ahead=idx + 1),
         )
         df = df.join(df_append) if not df.empty else df_append
 
