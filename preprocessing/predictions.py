@@ -21,14 +21,14 @@ def _correct_future_time_index(
         pd.DatetimeIndex: corrected time index to reflect future time steps
     """
     corrected_time_index = [None] * len(time_index)
-    for jdx, dt in enumerate(time_index):
-        if jdx == 0:  # only shift start point by days ahead
-            corrected_time_index[jdx] = financial_date_correction(
+    for idx, dt in enumerate(time_index):
+        if idx == 0:  # only shift start point by days ahead
+            corrected_time_index[idx] = financial_date_correction(
                 dt + relativedelta(days=days_ahead)
             )
         else:  # shift all other times stamps ahead by a day from previous step
-            corrected_time_index[jdx] = financial_date_correction(
-                corrected_time_index[jdx - 1] + relativedelta(days=1),
+            corrected_time_index[idx] = financial_date_correction(
+                corrected_time_index[idx - 1] + relativedelta(days=1),
                 direction="forward",
             )
 
