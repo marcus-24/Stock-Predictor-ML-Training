@@ -36,6 +36,7 @@ jobs:
       - name: Train machine learning model
         env:
           HF_TOKEN: ${{secrets.HF_TOKEN}}
+          HOPSWORKS_KEY: ${{secrets.HOPSWORKS_KEY}}
           NEPTUNE_TOKEN: ${{secrets.NEPTUNE_TOKEN}}
           ENV_NAME: prod
         run: python main.py
