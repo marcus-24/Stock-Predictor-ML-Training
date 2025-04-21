@@ -25,7 +25,6 @@ from preprocessing.transformations import (
 from preprocessing.predictions import format_predictions, performance_plot
 from models.builders import build_model
 from configs.mysettings import NeptuneSettings, HuggingFaceSettings, HopsworksSettings
-from configs.branchsettings import set_env_name
 from myfeatures.mlops import delete_existing_feature_group
 
 warnings.filterwarnings("ignore", message="You are saving your model as an HDF5 file.")
@@ -40,11 +39,10 @@ EPOCHS = 1000
 TEST_SIZE = 0.25
 VAL_SIZE = 0.5  # split in relation to test size
 
-BRANCH_NAME: str = os.getenv("BRANCH_NAME")
-ENV = set_env_name(BRANCH_NAME)
+ENV_NAME: str = os.getenv("ENV_NAME")
 
 # TODO: Make these environment variables where models and data is pushed to a separate branches depending on enviornment
-REPO_ID = "DrMarcus24/stock-predictor"
+REPO_ID = f"DrMarcus24/stock-predictor-{ENV_NAME}"
 
 # %% Get Data from Feature Store
 hopsworks_settings = HopsworksSettings()
@@ -53,8 +51,8 @@ project = hopsworks.login(
 )
 fs: FeatureStore = project.get_feature_store()
 
-features_fg = fs.get_feature_group(name="stock_features")
-labels_fg = fs.get_feature_group(name="stock_labels")
+features_fg = fs.get_feature_group(name=f"stock_features_{ENV_NAME}")
+labels_fg = fs.get_feature_group(name=f"stock_labels_{ENV_NAME}")
 
 
 query = features_fg.select_all().join(
@@ -62,7 +60,7 @@ query = features_fg.select_all().join(
 )
 
 feature_view = fs.create_feature_view(
-    name="model_training_data",
+    name=f"model_training_data_{ENV_NAME}",
     query=query,
 )
 
@@ -85,14 +83,14 @@ neptune_settings = NeptuneSettings()
 neptune_run = neptune.init_run(
     project="marcus-24/Neptune-Stock-Predictor",
     api_token=neptune_settings.NEPTUNE_TOKEN.get_secret_value(),
-    tags=["model", "PRODUCTION"],
+    tags=["model_env", ENV_NAME],
 )  # track training metrics in neptune server
 
 """Save paramaters"""
 neptune_run["parameters/batch_size"] = BATCH_SIZE
 neptune_run["parameters/test_size"] = TEST_SIZE
 neptune_run["parameters/val_size"] = VAL_SIZE
-neptune_run["environment"] = ENV
+neptune_run["environment"] = ENV_NAME
 
 neptune_run["training/train/data_start_date"] = df_train.index[0]
 neptune_run["training/train/data_end_date"] = df_train.index[-1]
@@ -132,8 +130,6 @@ whole_set = df_to_dataset(df, batch_size=BATCH_SIZE)
 whole_features = whole_set.map(lambda x, _: x)  # get only the features
 predictions = model.predict(whole_features)  # create predictions
 predictions_df = format_predictions(predictions, features=df)
-predictions_df.to_csv("predictions.csv")
-
 
 # """Save plot to Neptune"""
 financial_data = yf.Ticker("AAPL").history(start=df.index[0], end=df.index[-1])
@@ -169,7 +165,7 @@ if not repo_exists or new_model_mae < existing_model_mae:
 
     model.save(model_url)
 
-    fg_name = "trained_model_predictions"
+    fg_name = f"trained_model_monitor_baseline_{ENV_NAME}"
     delete_existing_feature_group(fs, fg_name=fg_name)
     fg_predictions: FeatureGroup = fs.create_feature_group(
         name=fg_name,
@@ -179,4 +175,5 @@ if not repo_exists or new_model_mae < existing_model_mae:
         online_enabled=False,
     )
 
-    fg_predictions.insert(predictions_df)
+    monitor_df = df.join(predictions_df).reset_index(names="date")
+    fg_predictions.insert(monitor_df)
