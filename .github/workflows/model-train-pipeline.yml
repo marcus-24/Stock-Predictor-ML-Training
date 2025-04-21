@@ -37,5 +37,5 @@ jobs:
         env:
           HF_TOKEN: ${{secrets.HF_TOKEN}}
           NEPTUNE_TOKEN: ${{secrets.NEPTUNE_TOKEN}}
-          BRANCH_NAME: ${{github.ref_name}}
+          ENV_NAME: prod
         run: python main.py
