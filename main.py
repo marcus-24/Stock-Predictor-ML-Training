@@ -34,8 +34,8 @@ load_dotenv(override=True)
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"  # needed to suppress out of rand warnings
 
 # %% Define constant variables
-BATCH_SIZE = 32
-EPOCHS = 1000
+BATCH_SIZE = 256
+EPOCHS = 10000
 TEST_SIZE = 0.25
 VAL_SIZE = 0.5  # split in relation to test size
 
@@ -132,7 +132,7 @@ predictions = model.predict(whole_features)  # create predictions
 predictions_df = format_predictions(predictions, features=df)
 
 # """Save plot to Neptune"""
-financial_data = yf.Ticker("AAPL").history(start=df.index[0], end=df.index[-1])
+financial_data = yf.Ticker("^DJI").history(start=df.index[0], end=df.index[-1])
 fig = performance_plot(predictions_df, financial_data)
 
 neptune_run["visuals/prediction_vs_target"].upload(File.as_html(fig))

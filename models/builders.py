@@ -34,7 +34,7 @@ def build_model(
         [
             layers.InputLayer(shape=(win_size, n_features), batch_size=batch_size),
             norm_layer,
-            layers.Bidirectional(layers.LSTM(5, return_sequences=True)),
+            layers.Bidirectional(layers.LSTM(400, return_sequences=True)),
             layers.Dense(n_labels),
         ]
     )
