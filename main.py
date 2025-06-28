@@ -1,8 +1,6 @@
 # %%
 # standard imports
 import os
-
-os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"  # turn off one DNN custom operations
 import keras
 from keras import models
 import hopsworks
@@ -31,7 +29,6 @@ warnings.filterwarnings("ignore", message="You are saving your model as an HDF5 
 
 load_dotenv(override=True)
 
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"  # needed to suppress out of rand warnings
 
 # %% Define constant variables
 BATCH_SIZE = 256

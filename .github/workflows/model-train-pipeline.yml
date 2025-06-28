@@ -35,6 +35,8 @@ jobs:
 
       - name: Train machine learning model
         env:
+          TF_ENABLE_ONEDNN_OPTS: "0" # turn off one DNN custom operations
+          TF_CPP_MIN_LOG_LEVEL: "3" # needed to suppress out of rand warnings
           HF_TOKEN: ${{secrets.HF_TOKEN}}
           HOPSWORKS_KEY: ${{secrets.HOPSWORKS_KEY}}
           NEPTUNE_TOKEN: ${{secrets.NEPTUNE_TOKEN}}
